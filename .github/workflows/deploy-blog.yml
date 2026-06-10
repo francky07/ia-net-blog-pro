@@ -1,0 +1,16 @@
+name: Deploy Blog to GitHub Pages
+
+on:
+  workflow_dispatch:
+  push:
+    branches: ["main"]
+
+jobs:
+  build-and-deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: EdricChan03/action-build-deploy-ghpages@v3
+        with:
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+          gh_pages_commit_message: "Auto-deploy du blog par IA NetSolutions"
