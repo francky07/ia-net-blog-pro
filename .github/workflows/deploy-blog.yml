@@ -1,14 +1,37 @@
 name: Deploy Blog to GitHub Pages
+
 on:
   workflow_dispatch:
   push:
     branches: ["main"]
+
 jobs:
   build-and-deploy:
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      pages: write
+      id-token: write
+
     steps:
-      - uses: actions/checkout@v4
-      - uses: EdricChan03/action-build-deploy-ghpages@v3
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Ruby
+        uses: ruby/setup-ruby@v1
         with:
-          github_token: ${{ secrets.GITHUB_TOKEN }}
-          gh_pages_commit_message: "Auto-deploy par IA"
+          ruby-version: '3.2'
+          bundler-cache: true
+
+      - name: Build Jekyll site
+        run: bundle exec jekyll build
+
+      - name: Upload Pages artifact
+        uses: actions/upload-pages-artifact@v3
+        with:
+          path: '_site'
+
+      - name: Deploy to GitHub Pages
+        uses: actions/deploy-pages@v4
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
