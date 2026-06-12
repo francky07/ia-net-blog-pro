@@ -1,1 +1,61 @@
-# Copiez ici le contenu du YAML ci-dessus
+name: Auto-correcteur de workflows
+
+on:
+  workflow_run:
+    workflows: ["Deploy to GitHub Pages", "Comprehensive CI/CD Pipeline"]
+    types:
+      - completed
+  workflow_dispatch:
+
+jobs:
+  auto-fix:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      actions: read
+    steps:
+      - uses: actions/checkout@v4
+      
+      - name: Vérifier les échecs récents
+        id: check
+        run: |
+          for wf in "Deploy to GitHub Pages" "Comprehensive CI/CD Pipeline"; do
+            LAST_RUN=$(gh run list --workflow "$wf" --limit 1 --json conclusion --jq '.[0].conclusion')
+            if [ "$LAST_RUN" = "failure" ]; then
+              echo "failure_detected=true" >> $GITHUB_OUTPUT
+              echo "failed_workflow=$wf" >> $GITHUB_OUTPUT
+            fi
+          done
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      
+      - name: Corriger le workflow défaillant
+        if: steps.check.outputs.failure_detected == 'true'
+        run: |
+          WF_FILE=".github/workflows/comprehensive-ci.yml"
+          if ! grep -q "id-token: write" "$WF_FILE"; then
+            sed -i '/permissions:/a\      id-token: write' "$WF_FILE"
+            git config user.name "github-actions[bot]"
+            git config user.email "github-actions[bot]@users.noreply.github.com"
+            git add "$WF_FILE"
+            git commit -m "Auto-fix: ajout de id-token: write dans le workflow"
+            git push
+          else
+            echo "Le workflow a déjà les bonnes permissions."
+          fi
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      
+      - name: Créer une issue en cas d'échec persistant
+        if: steps.check.outputs.failure_detected == 'true'
+        uses: actions/github-script@v7
+        with:
+          script: |
+            github.rest.issues.create({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              title: `Échec persistant du workflow ${process.env.FAILED_WORKFLOW}`,
+              body: `Le workflow ${process.env.FAILED_WORKFLOW} a échoué. Une tentative de correction automatique a été effectuée. Si l'erreur persiste, veuillez inspecter les logs.`
+            })
+        env:
+          FAILED_WORKFLOW: ${{ steps.check.outputs.failed_workflow }}
